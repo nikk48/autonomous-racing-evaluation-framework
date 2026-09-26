@@ -1,193 +1,74 @@
-# TORCS AI Racing Experimentation Framework
+# Autonomous Racing: Experimentation & Evaluation Framework
 
-This repository supports the Part C dissertation question:
+Python framework for systematic experimentation, hyperparameter optimisation (Optuna) and reproducible, auditable evaluation of autonomous-racing agents in [TORCS](http://torcs.sourceforge.net/).
 
-> How can systematic experimentation and hyperparameter optimisation improve
-> the computational efficiency, robustness and reproducibility of an autonomous
-> racing agent while supporting talent identification through evidence of
-> applied AI skills?
+Built as Part C of an MSc dissertation at the University of Manchester (Alliance Manchester Business School), based on an industry-proposed brief from IBM: *"Systematic Experimentation and Hyperparameter Optimisation for Reproducible Evaluation of Autonomous Racing Agents."*
 
-Part C contributes the experimentation, logging, analysis and comparison
-framework. The PPO model was developed in Part B and is imported here only as
-an evaluated policy artefact.
+---
 
-## Project Structure
+## What this is
 
-```text
-Part_C_Experimentation/
-  agents/                 Rule-based baseline agent
-  configs/                Baseline, search-space and generated YAML configs
-  data/run_log.csv        Part C dummy/live run log
-  data/partb_results.csv  Imported Part B PPO results
-  data/telemetry_logs/    Per-run telemetry CSV files
-  notes/                  Experiment diary and methodology notes
-  results/                Scored outputs, summaries and charts
-  scripts/                Experiment, import, analysis and tuning scripts
-```
+A working evaluation pipeline that:
 
-## Setup
+- Runs **systematic hyperparameter optimisation** (grid search, random search, Optuna) on a hand-coded racing controller
+- **Verifies reproducibility** independently — using SHA-256 file hashes and telemetry timestamps, rather than trusting run logs alone
+- **Detects data-quality problems**: the verification process caught a real logging defect during this project, where two run-log rows pointed to the same telemetry file
+- **Fairly labels and compares evidence from different sources**, including externally generated artefacts, without blending them into one misleading ranking
+- Reports **safety and completion outcomes**, and computational-efficiency indicators (runtime, decision latency, CPU, memory), alongside lap time
 
-```bash
-cd ~/Desktop/Part_C_Experimentation
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
+## What this isn't
 
-## Source Labels
+This is **not** a claim to have built the fastest autonomous racing agent. The contribution is methodological: a trustworthy way to test, verify, and compare autonomous-racing evidence — not a performance benchmark.
 
-Every result row has a controlled `source` value:
+The framework's own hand-coded, Optuna-tuned configuration produced a **modest, verified 1.2-second improvement** over baseline (see Results below). A much faster lap time from an externally developed PPO-based policy also appears in the results table below; **that policy was built by a teammate as part of the wider group dissertation project, not by this framework or by me** — it's included only to test the framework's ability to score a fundamentally different type of evidence on equal footing.
 
-- `dummy`: baseline dummy validation
-- `grid_dummy`: grid-search dummy validation
-- `optuna_dummy`: Optuna dummy validation
-- `live`: live TORCS baseline/control evidence
-- `grid_live`: live TORCS grid-search evidence
-- `optuna_live`: live TORCS Optuna evidence
-- `partb_imported`: imported Part B PPO policy evidence
+---
 
-Dummy rows prove that the pipeline works. They should not be cited as final
-live simulator performance.
+## Methodology
 
-## Dummy Baseline
+Evaluation followed a staged approach:
 
-```bash
-source venv/bin/activate
-python scripts/run_experiment.py --config configs/baseline_config.yaml --dummy
-```
+1. **Dummy-mode validation** — a simplified simulator validated the logging and analysis pipeline before any live testing (81 grid-search configurations, 5 random-search configurations, 10 Optuna trials).
+2. **Hyperparameter optimisation** — grid search, random search and Optuna were applied to a hand-coded controller's parameters.
+3. **Live evaluation** — selected configurations were tested live in TORCS on the Corkscrew track, with 3 valid runs each.
+4. **Reproducibility verification** — repeated live runs were checked against their underlying raw telemetry files (file path, SHA-256 content hash, and internal timestamps), not accepted on the basis of run-log labels alone.
 
-This appends dummy rows to `data/run_log.csv` and writes timestamped telemetry
-files in `data/telemetry_logs/`.
+## Results
 
-## Grid Search
+### My framework's own result (rule-based controller + HPO)
 
-Generate grid configs:
+All configurations below were designed, tuned and evaluated within this project, verified across 3 live runs each (100% completion, 0 crashes, 0 off-track events):
 
-```bash
-python scripts/grid_search.py
-```
+| Configuration      | Source              | Mean lap time (s) | vs. baseline |
+|---------------------|----------------------|--------------------:|-------------:|
+| Untuned baseline     | rule-based           | 196.726              | —            |
+| GRID_030             | grid search          | 199.806              | −3.080s      |
+| GRID_040             | grid search          | 198.906              | −2.180s      |
+| **OPTUNA_LIVE_001**  | **Optuna (this project)** | **195.526**    | **+1.200s**  |
 
-Run selected dummy configs:
+The Optuna-derived configuration produced a verified **1.2-second improvement over baseline (0.61%)**, confirmed across 3 live runs via SHA-256 file-hash and telemetry-timestamp verification. This process also correctly flagged one earlier logging defect during verification.
 
-```bash
-python scripts/run_experiment.py --config configs/generated_grid/GRID_030.yaml --dummy
-python scripts/run_experiment.py --config configs/generated_grid/GRID_040.yaml --dummy
-```
+The two grid-search configurations favoured by dummy-mode (offline) validation actually **underperformed** once tested live — a result reported rather than discarded, since it demonstrates why offline and live evidence must be evaluated separately rather than assumed to transfer directly.
 
-## Import Part B PPO Results
+### Comparator artefact (not developed in this project)
 
-```bash
-python scripts/import_partb_results.py --source ~/Desktop/eva-optimised
-```
+| Evidence source      | Controller             | Mean lap time (s) | Developed by |
+|------------------------|--------------------------|--------------------:|--------------|
+| Externally generated   | PPO-based policy          | 107.298              | A teammate, as part of the wider group dissertation project |
 
-This writes `data/partb_results.csv` and refreshes
-`data/part_b_imports/part_b_import_manifest.csv`. Use
-`--append-run-log` only if you intentionally want imported Part B rows copied
-into `data/run_log.csv` for legacy workflows.
+This PPO-based result is **not this project's agent and not a contribution of this project**. It was imported only to test whether the framework could ingest, label, and fairly score an external artefact of a substantially different type alongside its own rule-based configurations. Its lap time demonstrates that capability — it should not be read as this project's own performance result.
 
-Earlier Part B rows that had already been appended to `data/run_log.csv` were
-preserved in `data/part_b_imports/run_log_partb_legacy_rows.csv` and removed
-from the active Part C run log.
+### Safety, completion and efficiency
 
-Final dissertation live baseline uses only verified EXP_001 rule_based rows.
-Earlier torcs_live diagnostic rows are archived and excluded from dissertation
-tables.
+All four framework-evaluated configurations completed 100% of valid runs with zero crashes and zero off-track events. Runtime and decision latency were similar across configurations (~12.3–12.5s runtime, ~0.006–0.007ms latency); CPU and memory readings varied more and are treated cautiously, since they may reflect other host-machine processes rather than the controller itself.
 
-## Analyse Results
+---
 
-Run each view separately:
+## Limitations
 
-```bash
-python scripts/analyse_results.py --mode dummy
-python scripts/analyse_results.py --mode live
-python scripts/analyse_results.py --mode partb
-python scripts/analyse_results.py --mode all
-```
+- Live testing covered a single track (Corkscrew) with a small sample size (3 runs per configuration) — reproducibility under these fixed conditions should not be read as a broader robustness claim across tracks, seeds, or disturbed driving conditions.
+- CPU and memory measurements may include noise from other host-machine processes.
 
-Generated outputs include:
+---
 
-- `results/dummy_scored_experiments.csv`
-- `results/live_scored_experiments.csv`
-- `results/partb_scored_experiments.csv`
-- `results/combined_scored_experiments.csv`
-- `results/summary_live.csv`
-- `results/summary_all.csv`
-- `results/robustness_summary.csv`
-- `results/computational_efficiency_summary.csv`
-- `results/comparison_summary.csv`
-
-Required charts are saved in `results/charts/`:
-
-- `best_lap_time_by_configuration.png`
-- `average_lap_time_with_variance.png`
-- `completion_rate_by_configuration.png`
-- `crash_offtrack_damage_comparison.png`
-- `runtime_or_decision_latency_comparison.png`
-- `balanced_score_by_configuration.png`
-
-## Optuna
-
-Validate Optuna in dummy mode first:
-
-```bash
-python scripts/optuna_tuning.py --mode dummy --trials 10 --runs 3 --profile coreSmall
-```
-
-Outputs:
-
-- `results/optuna_trials.csv`
-- `results/optuna_best_config.yaml`
-- `configs/generated_optuna/OPTUNA_DUMMY_*.yaml`
-- appended `optuna_dummy` rows in `data/run_log.csv`
-
-The objective balances lap time, completion rate, crashes, off-track events and
-runtime. Do not use live Optuna until TORCS baseline live runs are stable.
-
-## Live TORCS Runs
-
-Start TORCS through Wine:
-
-```bash
-cd ~/Desktop/TORCS-Wine-Setup
-./Run_TORCS.command
-```
-
-Inside TORCS, open Practice/New Race with the SCR/server driver active on UDP
-port `3001`. Then use a second Terminal:
-
-```bash
-cd ~/Desktop/Part_C_Experimentation
-source venv/bin/activate
-python scripts/run_torcs_live.py --config configs/baseline_config.yaml --port 3001 --runs 3
-```
-
-Selected live grid tests:
-
-```bash
-python scripts/run_torcs_live.py --config configs/generated_grid/GRID_030.yaml --port 3001 --runs 3
-python scripts/run_torcs_live.py --config configs/generated_grid/GRID_040.yaml --port 3001 --runs 3
-```
-
-Small live Optuna test only after TORCS is stable:
-
-```bash
-python scripts/optuna_tuning.py --mode live --trials 3 --runs 1 --profile core --port 3001
-```
-
-## Current Evidence Snapshot
-
-After the latest analysis:
-
-- verified live baseline best lap: `196.726s` from EXP_001 rule_based rows
-- imported Part B PPO best lap: `106.892s`
-- Part B PPO completion rate: `1.00`
-- live analysis excluded three zero-lap connection attempts
-- dummy Optuna validation best trial: `OPTUNA_DUMMY_008`
-
-Correct dissertation wording:
-
-> The PPO model was developed in Part B and imported into Part C as an
-> evaluated policy artefact. Part C contributes the systematic experimentation
-> framework used to standardise, compare, analyse and interpret baseline,
-> tuned, Optuna and Part B PPO results using common performance, robustness,
-> reproducibility and computational-efficiency metrics.
+## Repository structure
